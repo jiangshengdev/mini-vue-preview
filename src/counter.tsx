@@ -1,7 +1,7 @@
-import type { SetupFunctionComponent } from '@jiangshengdev/mini-vue'
+import type { SetupComponent } from '@jiangshengdev/mini-vue'
 import { reactive } from '@jiangshengdev/mini-vue'
 
-export const Counter: SetupFunctionComponent = () => {
+export const Counter: SetupComponent = () => {
   const state = reactive({ count: 0 })
 
   const increment = () => {

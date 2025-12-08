@@ -1,6 +1,7 @@
 import './style.css'
 import { App } from './app.tsx'
-import { createApp, type DomAppInstance } from '@jiangshengdev/mini-vue'
+import type { DomAppInstance } from '@jiangshengdev/mini-vue'
+import { createApp } from '@jiangshengdev/mini-vue'
 
 const host = document.querySelector<HTMLDivElement>('#app')
 
