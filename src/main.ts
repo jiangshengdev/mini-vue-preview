@@ -1,5 +1,7 @@
-import './style.css'
+import './styles/main.css'
+import './styles/router.css'
 import { App } from './app.tsx'
+import { router } from './router'
 import type { DomAppInstance } from '@jiangshengdev/mini-vue'
 import { createApp } from '@jiangshengdev/mini-vue'
 
@@ -11,4 +13,5 @@ if (!host) {
 
 const app: DomAppInstance = createApp(App)
 
+app.use(router)
 app.mount(host)
