@@ -18,6 +18,6 @@
     }
   },
   "dependencies": {
-    "@jiangshengdev/mini-vue": "0.0.1-beta.25"
+    "@jiangshengdev/mini-vue": "0.0.1-beta.28"
   }
 }
