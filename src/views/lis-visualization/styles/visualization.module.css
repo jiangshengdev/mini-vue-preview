@@ -73,6 +73,13 @@
   color: var(--color-text-primary);
 }
 
+.intro {
+  margin: 0 0 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
 .main {
   flex: 1;
   display: flex;
@@ -84,6 +91,14 @@
   margin-top: 0.75rem;
   padding-top: 0.5rem;
   border-top: 1px solid var(--color-border);
+}
+
+.principlesList {
+  margin: 0.25rem 0 0;
+  padding-left: 1.25rem;
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.6;
 }
 
 .emptyState {
@@ -377,6 +392,20 @@
   background: var(--color-bg-section);
 }
 
+.chainNodes .chainNode.chainNodeChangedSecondaryAppend {
+  border-color: var(--color-success);
+  border-style: dashed;
+  border-width: 2px;
+  background: var(--color-success-light);
+}
+
+.chainNodes .chainNode.chainNodeChangedSecondaryReplace {
+  border-color: var(--color-warning);
+  border-style: dashed;
+  border-width: 2px;
+  background: var(--color-warning-light);
+}
+
 /* Chain 节点链尾高亮（Sequence State hover 时） */
 .chainNodeTailHighlight {
   border-color: var(--color-hover) !important;
@@ -397,6 +426,7 @@
   flex-direction: column;
   gap: 0;
   margin-top: 0.125rem;
+  align-items: flex-start;
 }
 
 .chain {
