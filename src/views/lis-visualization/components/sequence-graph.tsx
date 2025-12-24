@@ -22,10 +22,24 @@ export interface SequenceGraphProps {
   previousSequence?: number[]
   /** 上一步的前驱数组（用于对比） */
   previousPredecessors?: number[]
+  /** Hover 高亮的索引列表 */
+  hoveredIndexes?: number[]
   /** 链 hover 回调 */
-  onChainHover?: (indexes: number[]) => void
+  onChainHover?: (indexes: number[], chainIndex: number) => void
   /** 链 leave 回调 */
   onChainLeave?: () => void
+  /** Sequence State 模块是否被 hover */
+  isSequenceHovered?: boolean
+  /** Sequence State hover 回调 */
+  onSequenceHover?: () => void
+  /** Sequence State leave 回调 */
+  onSequenceLeave?: () => void
+  /** Predecessors 模块是否被 hover */
+  isPredecessorsHovered?: boolean
+  /** Predecessors hover 回调 */
+  onPredecessorsHover?: () => void
+  /** Predecessors leave 回调 */
+  onPredecessorsLeave?: () => void
 }
 
 /** 从 sequence 中的索引回溯 predecessors 构建链 */
@@ -73,6 +87,19 @@ function getHighlightClass(action: StepAction | undefined): string {
   }
 }
 
+/** 根据操作类型获取半高亮样式类名（用于前驱来源） */
+function getSecondaryHighlightClass(action: StepAction | undefined): string {
+  if (!action || action.type === 'init' || action.type === 'skip') {
+    return ''
+  }
+
+  if (action.type === 'append') {
+    return styles.highlightSecondaryAppend
+  }
+
+  return styles.highlightSecondaryReplace
+}
+
 /** 计算 Sequence 变化指示器文本 */
 function getSeqChangeIndicator(action: StepAction | undefined, hasPrevious: boolean): string {
   if (!hasPrevious) {
@@ -102,15 +129,58 @@ function getSeqChangeIndicator(action: StepAction | undefined, hasPrevious: bool
   }
 }
 
+/** 渲染带高亮的数组参数 */
+interface RenderHighlightedArrayOptions {
+  array: number[]
+  highlightPos: number
+  highlightClass: string
+  secondaryHighlightValue?: number
+  secondaryHighlightClass?: string
+  hoveredPositions?: number[]
+}
+
 /** 渲染带高亮的数组 */
-function renderHighlightedArray(array: number[], highlightPos: number, highlightClass: string) {
+function renderHighlightedArray(options: RenderHighlightedArrayOptions) {
+  const {
+    array,
+    highlightPos,
+    highlightClass,
+    secondaryHighlightValue,
+    secondaryHighlightClass,
+    hoveredPositions,
+  } = options
+
   return (
     <>
       [
       {array.map((value, pos) => {
         const isHighlight = pos === highlightPos
+        // 半高亮：值等于前驱索引（用于显示 Sequence 中的前驱来源）
+        const isSecondaryHighlight =
+          secondaryHighlightValue !== undefined &&
+          secondaryHighlightValue >= 0 &&
+          value === secondaryHighlightValue
+        // Hover 高亮：位置在 hoveredPositions 中
+        const isHovered = hoveredPositions?.includes(pos)
+
+        const classes: string[] = []
+
+        if (isHighlight) {
+          // 已有高亮背景，hover 时用紫色背景覆盖
+          if (isHovered) {
+            classes.push(styles.highlightHover)
+          } else {
+            classes.push(highlightClass)
+          }
+        } else if (isSecondaryHighlight && secondaryHighlightClass) {
+          classes.push(secondaryHighlightClass)
+        } else if (isHovered) {
+          // 普通位置，hover 时只改字体颜色
+          classes.push(styles.highlightHoverText)
+        }
+
         const content = (
-          <span key={pos} class={isHighlight ? highlightClass : ''}>
+          <span key={pos} class={classes.join(' ')}>
             {value}
           </span>
         )
@@ -123,9 +193,9 @@ function renderHighlightedArray(array: number[], highlightPos: number, highlight
 }
 
 export const SequenceGraph: SetupComponent<SequenceGraphProps> = (props) => {
-  const handleChainMouseEnter = (chain: number[]) => {
+  const handleChainMouseEnter = (chain: number[], chainIndex: number) => {
     return () => {
-      props.onChainHover?.(chain)
+      props.onChainHover?.(chain, chainIndex)
     }
   }
 
@@ -133,10 +203,27 @@ export const SequenceGraph: SetupComponent<SequenceGraphProps> = (props) => {
     props.onChainLeave?.()
   }
 
+  const handleSequenceMouseEnter = () => {
+    props.onSequenceHover?.()
+  }
+
+  const handleSequenceMouseLeave = () => {
+    props.onSequenceLeave?.()
+  }
+
+  const handlePredecessorsMouseEnter = () => {
+    props.onPredecessorsHover?.()
+  }
+
+  const handlePredecessorsMouseLeave = () => {
+    props.onPredecessorsLeave?.()
+  }
+
   return () => {
     const chains = buildAllChains(props.sequence, props.predecessors)
     const { action, previousSequence, previousPredecessors } = props
     const highlightClass = getHighlightClass(action)
+    const secondaryHighlightClass = getSecondaryHighlightClass(action)
     const hasPrevious = previousSequence !== undefined
 
     // 确定需要高亮的位置
@@ -162,6 +249,27 @@ export const SequenceGraph: SetupComponent<SequenceGraphProps> = (props) => {
     // 计算变化指示器
     const seqChangeIndicator = getSeqChangeIndicator(action, hasPrevious)
 
+    // 计算前驱值（用于 Sequence State 的半高亮）
+    // 当 Predecessors 变化且值不为 -1 时，在 Sequence 中半高亮该前驱索引
+    let predecessorValue: number | undefined
+    let previousPredecessorValue: number | undefined
+
+    if (highlightPredIndex >= 0) {
+      const predValue = props.predecessors[highlightPredIndex]
+
+      if (predValue >= 0) {
+        predecessorValue = predValue
+      }
+    }
+
+    // 替换/追加操作时，为上一步行添加与当前相同的前驱半高亮，保持上下对齐
+    if (
+      (action?.type === 'replace' || action?.type === 'append') &&
+      predecessorValue !== undefined
+    ) {
+      previousPredecessorValue = predecessorValue
+    }
+
     // 比较 predecessors 是否真的有变化
     let predChangeIndicator = ''
 
@@ -180,7 +288,11 @@ export const SequenceGraph: SetupComponent<SequenceGraphProps> = (props) => {
     return (
       <div class={styles.sequenceGraph}>
         {/* Sequence State - CSS Grid 4列布局 */}
-        <div class={styles.stateCompareSection}>
+        <div
+          class={styles.stateCompareSection}
+          onMouseEnter={handleSequenceMouseEnter}
+          onMouseLeave={handleSequenceMouseLeave}
+        >
           <div class={styles.sectionTitle}>
             Sequence State:
             <span class={styles.sectionHint}>（存储的是 index，→ 后显示对应 value）</span>
@@ -191,21 +303,23 @@ export const SequenceGraph: SetupComponent<SequenceGraphProps> = (props) => {
               <div class={`${styles.stateRow} ${styles.previousRow}`}>
                 <span class={styles.stateRowLabel}>上一步:</span>
                 <code class={styles.stateCode}>
-                  {renderHighlightedArray(
-                    previousSequence,
-                    previousHighlightSeqPosition,
-                    styles.highlightPrevious,
-                  )}
+                  {renderHighlightedArray({
+                    array: previousSequence,
+                    highlightPos: previousHighlightSeqPosition,
+                    highlightClass: styles.highlightPrevious,
+                    secondaryHighlightValue: previousPredecessorValue,
+                    secondaryHighlightClass: styles.highlightPreviousSecondary,
+                  })}
                 </code>
                 <code class={styles.stateCode}>
                   → values:{' '}
-                  {renderHighlightedArray(
-                    previousSequence.map((idx) => {
+                  {renderHighlightedArray({
+                    array: previousSequence.map((idx) => {
                       return props.input[idx]
                     }),
-                    previousHighlightSeqPosition,
-                    styles.highlightPrevious,
-                  )}
+                    highlightPos: previousHighlightSeqPosition,
+                    highlightClass: styles.highlightPrevious,
+                  })}
                 </code>
                 <span class={styles.changeIndicator}></span>
               </div>
@@ -214,17 +328,23 @@ export const SequenceGraph: SetupComponent<SequenceGraphProps> = (props) => {
             <div class={styles.stateRow}>
               <span class={styles.stateRowLabel}>{hasPrevious ? '当前:' : ''}</span>
               <code class={styles.stateCode}>
-                {renderHighlightedArray(props.sequence, highlightSeqPosition, highlightClass)}
+                {renderHighlightedArray({
+                  array: props.sequence,
+                  highlightPos: highlightSeqPosition,
+                  highlightClass,
+                  secondaryHighlightValue: predecessorValue,
+                  secondaryHighlightClass,
+                })}
               </code>
               <code class={styles.stateCode}>
                 → values:{' '}
-                {renderHighlightedArray(
-                  props.sequence.map((idx) => {
+                {renderHighlightedArray({
+                  array: props.sequence.map((idx) => {
                     return props.input[idx]
                   }),
-                  highlightSeqPosition,
+                  highlightPos: highlightSeqPosition,
                   highlightClass,
-                )}
+                })}
               </code>
               <span class={styles.changeIndicator}>{seqChangeIndicator}</span>
             </div>
@@ -232,7 +352,11 @@ export const SequenceGraph: SetupComponent<SequenceGraphProps> = (props) => {
         </div>
 
         {/* Predecessors - CSS Grid 4列布局 */}
-        <div class={styles.stateCompareSection}>
+        <div
+          class={styles.stateCompareSection}
+          onMouseEnter={handlePredecessorsMouseEnter}
+          onMouseLeave={handlePredecessorsMouseLeave}
+        >
           <div class={styles.sectionTitle}>
             Predecessors:
             <span class={styles.sectionHint}>（每个位置存储前驱元素的 index，-1 表示无前驱）</span>
@@ -243,11 +367,11 @@ export const SequenceGraph: SetupComponent<SequenceGraphProps> = (props) => {
               <div class={`${styles.stateRow} ${styles.previousRow}`}>
                 <span class={styles.stateRowLabel}>上一步:</span>
                 <code class={styles.stateCode}>
-                  {renderHighlightedArray(
-                    previousPredecessors!,
-                    highlightPredIndex,
-                    styles.highlightPrevious,
-                  )}
+                  {renderHighlightedArray({
+                    array: previousPredecessors!,
+                    highlightPos: highlightPredIndex,
+                    highlightClass: styles.highlightPrevious,
+                  })}
                 </code>
                 <span></span>
                 <span class={styles.changeIndicator}></span>
@@ -257,7 +381,12 @@ export const SequenceGraph: SetupComponent<SequenceGraphProps> = (props) => {
             <div class={styles.stateRow}>
               <span class={styles.stateRowLabel}>{hasPrevious ? '当前:' : ''}</span>
               <code class={styles.stateCode}>
-                {renderHighlightedArray(props.predecessors, highlightPredIndex, highlightClass)}
+                {renderHighlightedArray({
+                  array: props.predecessors,
+                  highlightPos: highlightPredIndex,
+                  highlightClass,
+                  hoveredPositions: props.hoveredIndexes,
+                })}
               </code>
               <span></span>
               <span class={styles.changeIndicator}>{predChangeIndicator}</span>
@@ -274,23 +403,34 @@ export const SequenceGraph: SetupComponent<SequenceGraphProps> = (props) => {
           <div class={styles.chainsContainer}>
             {chains.map((chain, chainIndex) => {
               const isHighlightChain = highlightPredIndex >= 0 && chain.includes(highlightPredIndex)
+              // 当 Predecessors 被 hover 时，高亮包含当前操作索引的链
+              const isPredecessorsHighlightChain = props.isPredecessorsHovered && isHighlightChain
+
+              const chainClass = isPredecessorsHighlightChain
+                ? `${styles.chain} ${styles.chainHighlight}`
+                : styles.chain
 
               return (
                 <div
                   key={chainIndex}
-                  class={styles.chain}
-                  onMouseEnter={handleChainMouseEnter(chain)}
+                  class={chainClass}
+                  onMouseEnter={handleChainMouseEnter(chain, chainIndex)}
                   onMouseLeave={handleChainMouseLeave}
                 >
-                  <span class={styles.chainLabel}>
-                    Chain {chainIndex + 1}（长度：{chain.length}）
-                  </span>
                   <div class={styles.chainNodes}>
                     {chain.flatMap((nodeIndex, i) => {
                       const isHighlightNode = isHighlightChain && nodeIndex === highlightPredIndex
-                      const nodeClass = isHighlightNode
-                        ? `${styles.chainNode} ${highlightClass}`
-                        : styles.chainNode
+                      const isLastNode = i === chain.length - 1
+                      // 当 Sequence State 被 hover 时，高亮链尾节点
+                      const isChainTailHighlight = props.isSequenceHovered && isLastNode
+
+                      let nodeClass = styles.chainNode
+
+                      if (isChainTailHighlight) {
+                        nodeClass = `${styles.chainNode} ${styles.chainNodeTailHighlight}`
+                      } else if (isHighlightNode) {
+                        nodeClass = `${styles.chainNode} ${highlightClass}`
+                      }
 
                       const node = (
                         <div key={`node-${nodeIndex}`} class={nodeClass}>

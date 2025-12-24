@@ -225,6 +225,11 @@
   background: var(--color-bg-section);
   border-radius: 0.375rem;
   font-size: 0.8125rem;
+  transition: background-color 0.15s ease;
+}
+
+.stateCompareSection:hover {
+  background: var(--color-hover-light);
 }
 
 .stateCompareGrid {
@@ -311,6 +316,47 @@
   background: var(--color-border);
   padding: 0.125rem 0.25rem;
   border-radius: 0.25rem;
+  box-sizing: border-box;
+}
+
+/* 上一步行半高亮：灰色虚线，保持弱提示 */
+.highlightPreviousSecondary {
+  background: transparent;
+  border: 1px dashed transparent;
+  padding: 0.0625rem 0.1875rem;
+  border-radius: 0.25rem;
+  box-sizing: border-box;
+}
+
+/* 半高亮：显示前驱来源（追加操作 - 绿色虚线） */
+.highlightSecondaryAppend {
+  background: var(--color-success-light);
+  border: 1px dashed var(--color-success);
+  padding: 0.0625rem 0.1875rem;
+  border-radius: 0.25rem;
+  box-sizing: border-box;
+}
+
+/* 半高亮：显示前驱来源（替换操作 - 黄色虚线） */
+.highlightSecondaryReplace {
+  background: var(--color-warning-light);
+  border: 1px dashed var(--color-warning);
+  padding: 0.0625rem 0.1875rem;
+  border-radius: 0.25rem;
+  box-sizing: border-box;
+}
+
+/* hover 高亮：紫色背景（覆盖已有高亮） */
+.highlightHover {
+  background: var(--color-hover);
+  color: var(--color-bg-page);
+  padding: 0.125rem 0.25rem;
+  border-radius: 0.25rem;
+}
+
+/* hover 高亮：紫色字体（普通位置） */
+.highlightHoverText {
+  color: var(--color-hover);
 }
 
 /* Chain 节点高亮 */
@@ -331,9 +377,16 @@
   background: var(--color-bg-section);
 }
 
+/* Chain 节点链尾高亮（Sequence State hover 时） */
+.chainNodeTailHighlight {
+  border-color: var(--color-hover) !important;
+  background: var(--color-hover-light) !important;
+  box-shadow: 0 0 0 2px var(--color-hover-shadow) !important;
+}
+
 .chainView {
   margin-top: 0.5rem;
-  padding: 0.75rem;
+  padding: 0.375rem;
   background: var(--color-bg-section);
   border-radius: 0.5rem;
   border: 1px solid var(--color-border);
@@ -342,20 +395,25 @@
 .chainsContainer {
   display: flex;
   flex-direction: column;
-  gap: 0.625rem;
-  margin-top: 0.5rem;
+  gap: 0;
+  margin-top: 0.125rem;
 }
 
 .chain {
   display: flex;
   flex-direction: column;
-  gap: 0.375rem;
-  padding: 0.5rem;
+  gap: 0.125rem;
+  padding: 0.25rem;
   border-radius: 0.375rem;
   transition: background-color 0.15s ease;
 }
 
 .chain:hover {
+  background: var(--color-hover-light);
+}
+
+/* Predecessors hover 时高亮整条链 */
+.chainHighlight {
   background: var(--color-hover-light);
 }
 
@@ -368,7 +426,7 @@
 .chainNodes {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.375rem;
   flex-wrap: wrap;
 }
 
@@ -376,7 +434,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 0.375rem 0.5rem;
+  padding: 0.25rem 0.375rem;
   min-width: 2.5rem;
   border: 2px solid var(--color-border-medium);
   border-radius: 0.375rem;
