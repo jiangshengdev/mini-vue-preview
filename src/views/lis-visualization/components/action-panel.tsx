@@ -1,13 +1,23 @@
 /**
  * LIS 算法可视化 - 操作面板组件
  *
- * 显示当前操作类型和详情
+ * @remarks
+ * 显示当前步骤的操作类型、描述和变更明细。
+ * - 操作类型：初始化、追加、替换、跳过
+ * - 变更明细：展示 `sequence` 和 `predecessors` 的具体修改
  */
 
 import type { StepAction } from '../types'
-import styles from '../styles/visualization.module.css'
+import sharedStyles from '../styles/shared.module.css'
+import styles from '../styles/action-panel.module.css'
 import type { SetupComponent } from '@jiangshengdev/mini-vue'
 
+/** 合并共享样式与组件专属样式，共享样式优先级较低 */
+const mergedStyles = { ...sharedStyles, ...styles }
+
+/**
+ * 操作面板组件的 Props 定义
+ */
 export interface ActionPanelProps {
   /** 当前操作 */
   action: StepAction | undefined
@@ -19,7 +29,15 @@ export interface ActionPanelProps {
   predecessors: number[]
 }
 
-/** 根据操作类型生成描述文本 */
+/**
+ * 根据操作类型生成人类可读的描述文本
+ *
+ * @remarks
+ * - `init`：算法初始化说明
+ * - `append`：追加操作，显示索引和值
+ * - `replace`：替换操作，显示位置、索引和值
+ * - `skip`：跳过操作，区分占位符和重复值两种情况
+ */
 function getActionDescription(action: StepAction, currentValue: number): string {
   switch (action.type) {
     case 'init': {
@@ -45,28 +63,37 @@ function getActionDescription(action: StepAction, currentValue: number): string 
   }
 }
 
-/** 根据操作类型获取样式类名 */
+/**
+ * 根据操作类型获取对应的 CSS 样式类名
+ */
 function getActionClass(action: StepAction): string {
   switch (action.type) {
     case 'init': {
-      return styles.actionInit
+      return mergedStyles.actionInit
     }
 
     case 'append': {
-      return styles.actionAppend
+      return mergedStyles.actionAppend
     }
 
     case 'replace': {
-      return styles.actionReplace
+      return mergedStyles.actionReplace
     }
 
     case 'skip': {
-      return styles.actionSkip
+      return mergedStyles.actionSkip
     }
   }
 }
 
-/** 生成变更明细 */
+/**
+ * 生成 `sequence` 和 `predecessors` 的变更明细文本
+ *
+ * @remarks
+ * - `init`：显示初始状态
+ * - `append`/`replace`：显示具体的数组修改
+ * - `skip`：显示无变更
+ */
 function getChangeDetails(
   action: StepAction,
   sequence: number[],
@@ -105,17 +132,26 @@ function getChangeDetails(
   }
 }
 
+/**
+ * 操作面板组件，展示当前步骤的操作信息
+ *
+ * @remarks
+ * - 无操作时显示等待状态
+ * - 有操作时显示操作类型、描述和变更明细
+ */
 export const ActionPanel: SetupComponent<ActionPanelProps> = (props) => {
   return () => {
+    /* 无操作时显示等待状态 */
     if (!props.action) {
       return (
-        <div class={styles.actionPanel}>
-          <h3 class={styles.sectionTitle}>操作</h3>
-          <div class={styles.actionContent}>（等待开始）</div>
+        <div class={mergedStyles.actionPanel}>
+          <h3 class={mergedStyles.sectionTitle}>操作</h3>
+          <div class={mergedStyles.actionContent}>（等待开始）</div>
         </div>
       )
     }
 
+    /* 计算操作描述、样式和变更明细 */
     const description = getActionDescription(props.action, props.currentValue ?? -1)
     const actionClass = getActionClass(props.action)
     const { sequenceChange, predecessorsChange } = getChangeDetails(
@@ -124,6 +160,7 @@ export const ActionPanel: SetupComponent<ActionPanelProps> = (props) => {
       props.predecessors,
     )
 
+    /** 操作类型中英文映射 */
     const actionTypeMap: Record<string, string> = {
       init: '初始化',
       append: '追加',
@@ -132,15 +169,15 @@ export const ActionPanel: SetupComponent<ActionPanelProps> = (props) => {
     }
 
     return (
-      <div class={styles.actionPanel}>
-        <h3 class={styles.sectionTitle}>操作</h3>
-        <div class={`${styles.actionContent} ${actionClass}`}>
-          <span class={styles.actionType}>{actionTypeMap[props.action.type]}</span>
-          <span class={styles.actionDescription}>{description}</span>
+      <div class={mergedStyles.actionPanel}>
+        <h3 class={mergedStyles.sectionTitle}>操作</h3>
+        <div class={`${mergedStyles.actionContent} ${actionClass}`}>
+          <span class={mergedStyles.actionType}>{actionTypeMap[props.action.type]}</span>
+          <span class={mergedStyles.actionDescription}>{description}</span>
         </div>
-        <div class={styles.actionDetails}>
-          <code class={styles.actionDetailCode}>{sequenceChange}</code>
-          <code class={styles.actionDetailCode}>{predecessorsChange}</code>
+        <div class={mergedStyles.actionDetails}>
+          <code class={mergedStyles.actionDetailCode}>{sequenceChange}</code>
+          <code class={mergedStyles.actionDetailCode}>{predecessorsChange}</code>
         </div>
       </div>
     )

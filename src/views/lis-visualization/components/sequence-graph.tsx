@@ -1,568 +1,87 @@
 /**
  * LIS 算法可视化 - 序列状态图组件
  *
- * 显示 Sequence State、Predecessors 数组和 Chain View
- * 支持上一步与当前步骤的状态对比
+ * @remarks
+ * 显示 Sequence State、Predecessors 数组和 Chain View。
+ * - 支持上一步与当前步骤的状态对比
+ * - 作为编排层，组合子组件并协调它们之间的交互
+ * - 处理 hover 事件的传递和高亮状态的计算
  */
 
 import type { StepAction } from '../types'
-import styles from '../styles/visualization.module.css'
+import sharedStyles from '../styles/shared.module.css'
+import styles from '../styles/sequence-graph.module.css'
+import {
+  buildAllChains,
+  computeChangedNodesByChain,
+  computeHighlightState,
+  computePredChangeIndicator,
+  computePredecessorHighlight,
+  getHighlightClass,
+  getSecondaryHighlightClass,
+  getSeqChangeIndicator,
+} from '../utils/index.ts'
+import { ChainView, PredecessorSection, SequenceSection } from './sequence-graph/index.ts'
 import type { SetupComponent } from '@jiangshengdev/mini-vue'
 
+/** 合并共享样式与组件专属样式 */
+const mergedStyles = { ...sharedStyles, ...styles }
+
+/**
+ * 序列状态图组件的 Props 定义
+ */
 export interface SequenceGraphProps {
+  /** 输入数组 */
   input: number[]
+  /** 当前 sequence 状态 */
   sequence: number[]
+  /** 当前 predecessors 状态 */
   predecessors: number[]
+  /** 当前操作 */
   action?: StepAction
+  /** 上一步的 sequence 状态（用于对比） */
   previousSequence?: number[]
+  /** 上一步的 predecessors 状态（用于对比） */
   previousPredecessors?: number[]
+  /** Hover 高亮的索引列表 */
   hoveredIndexes?: number[]
+  /** 链 hover 事件回调 */
   onChainHover?: (indexes: number[], chainIndex: number) => void
+  /** 链 hover 离开事件回调 */
   onChainLeave?: () => void
+  /** Sequence 区域是否被 hover */
   isSequenceHovered?: boolean
+  /** Sequence 区域 hover 事件回调 */
   onSequenceHover?: () => void
+  /** Sequence 区域 hover 离开事件回调 */
   onSequenceLeave?: () => void
+  /** Predecessors 区域是否被 hover */
   isPredecessorsHovered?: boolean
+  /** Predecessors 区域 hover 事件回调 */
   onPredecessorsHover?: () => void
+  /** Predecessors 区域 hover 离开事件回调 */
   onPredecessorsLeave?: () => void
 }
 
-function buildChain(startIndex: number, predecessors: number[]): number[] {
-  const chain: number[] = []
-  let current = startIndex
-
-  while (current >= 0) {
-    chain.unshift(current)
-    current = predecessors[current]
-  }
-
-  return chain
-}
-
-function buildAllChains(sequence: number[], predecessors: number[]): number[][] {
-  return sequence.map((index) => {
-    return buildChain(index, predecessors)
-  })
-}
-
-function getHighlightClass(action: StepAction | undefined): string {
-  if (!action) {
-    return ''
-  }
-
-  switch (action.type) {
-    case 'init': {
-      return ''
-    }
-
-    case 'append': {
-      return styles.highlightAppend
-    }
-
-    case 'replace': {
-      return styles.highlightReplace
-    }
-
-    case 'skip': {
-      return styles.highlightSkip
-    }
-  }
-}
-
-function getSecondaryHighlightClass(action: StepAction | undefined): string {
-  if (!action || action.type === 'init' || action.type === 'skip') {
-    return ''
-  }
-
-  return action.type === 'append'
-    ? styles.highlightSecondaryAppend
-    : styles.highlightSecondaryReplace
-}
-
-function getSeqChangeIndicator(action: StepAction | undefined, hasPrevious: boolean): string {
-  if (!hasPrevious) {
-    return ''
-  }
-
-  if (!action) {
-    return '（无变化）'
-  }
-
-  switch (action.type) {
-    case 'init': {
-      return ''
-    }
-
-    case 'append': {
-      return '← 追加'
-    }
-
-    case 'replace': {
-      return `← 替换位置 ${action.position}`
-    }
-
-    case 'skip': {
-      return '（无变化）'
-    }
-  }
-}
-
-interface RenderHighlightedArrayOptions {
-  array: number[]
-  highlightPos: number
-  highlightClass: string
-  secondaryHighlightValue?: number
-  secondaryHighlightClass?: string
-  hoveredPositions?: number[]
-}
-
-function renderHighlightedArray(options: RenderHighlightedArrayOptions) {
-  const {
-    array,
-    highlightPos,
-    highlightClass,
-    secondaryHighlightValue,
-    secondaryHighlightClass,
-    hoveredPositions,
-  } = options
-
-  return (
-    <>
-      [
-      {array.map((value, pos) => {
-        const isHighlight = pos === highlightPos
-        const isSecondaryHighlight =
-          secondaryHighlightValue !== undefined &&
-          secondaryHighlightValue >= 0 &&
-          value === secondaryHighlightValue
-        const isHovered = hoveredPositions?.includes(pos)
-
-        const classes: string[] = []
-
-        if (isHighlight) {
-          classes.push(isHovered ? styles.highlightHover : highlightClass)
-        } else if (isSecondaryHighlight && secondaryHighlightClass) {
-          classes.push(secondaryHighlightClass)
-        } else if (isHovered) {
-          classes.push(styles.highlightHoverText)
-        }
-
-        const content = (
-          <span key={pos} class={classes.join(' ')}>
-            {value}
-          </span>
-        )
-
-        return pos < array.length - 1 ? [content, ', '] : content
-      })}
-      ]
-    </>
-  )
-}
-
-function computeChangedNodesByChain(
-  chains: number[][],
-  previousChains: number[][] | undefined,
-  isChainAction: boolean,
-  highlightPredIndex: number,
-): Map<number, Set<number>> {
-  const changed = new Map<number, Set<number>>()
-
-  for (const [chainIndex, chain] of chains.entries()) {
-    const previousChain = previousChains?.[chainIndex]
-    const nodeSet = new Set<number>()
-
-    if (previousChain) {
-      const maxLength = Math.max(chain.length, previousChain.length)
-
-      for (let i = 0; i < maxLength; i += 1) {
-        const currentNode = chain[i]
-        const previousNode = previousChain[i]
-
-        if (currentNode !== previousNode && currentNode !== undefined) {
-          nodeSet.add(currentNode)
-        }
-      }
-    } else if (isChainAction && highlightPredIndex >= 0 && chain.includes(highlightPredIndex)) {
-      for (const node of chain) {
-        nodeSet.add(node)
-      }
-    }
-
-    if (nodeSet.size > 0) {
-      changed.set(chainIndex, nodeSet)
-    }
-  }
-
-  return changed
-}
-
-function getNodeClassName(options: {
-  isChainTailHighlight: boolean
-  isHighlightNode: boolean
-  isChangedNode: boolean
-  actionType: StepAction['type'] | undefined
-  highlightClass: string
-}): string {
-  const { isChainTailHighlight, isHighlightNode, isChangedNode, actionType, highlightClass } =
-    options
-
-  if (isChainTailHighlight) {
-    return `${styles.chainNode} ${styles.chainNodeTailHighlight}`
-  }
-
-  if (isHighlightNode) {
-    return `${styles.chainNode} ${highlightClass}`
-  }
-
-  if (isChangedNode) {
-    if (actionType === 'append') {
-      return `${styles.chainNode} ${styles.chainNodeChangedSecondaryAppend}`
-    }
-
-    if (actionType === 'replace') {
-      return `${styles.chainNode} ${styles.chainNodeChangedSecondaryReplace}`
-    }
-  }
-
-  return styles.chainNode
-}
-
-function computeHighlightState(action: StepAction | undefined, sequence: number[]) {
-  let highlightSeqPosition = -1
-  let highlightPredIndex = -1
-  let previousHighlightSeqPosition = -1
-
-  if (action?.type === 'append') {
-    highlightSeqPosition = sequence.length - 1
-    highlightPredIndex = action.index
-  } else if (action?.type === 'replace') {
-    highlightSeqPosition = action.position
-    highlightPredIndex = action.index
-    previousHighlightSeqPosition = action.position
-  }
-
-  return { highlightSeqPosition, highlightPredIndex, previousHighlightSeqPosition }
-}
-
-function computePredecessorHighlight(
-  highlightPredIndex: number,
-  predecessors: number[],
-  action: StepAction | undefined,
-) {
-  let predecessorValue: number | undefined
-  let previousPredecessorValue: number | undefined
-
-  if (highlightPredIndex >= 0) {
-    const predValue = predecessors[highlightPredIndex]
-
-    if (predValue >= 0) {
-      predecessorValue = predValue
-    }
-  }
-
-  if ((action?.type === 'replace' || action?.type === 'append') && predecessorValue !== undefined) {
-    previousPredecessorValue = predecessorValue
-  }
-
-  return { predecessorValue, previousPredecessorValue }
-}
-
-function computePredChangeIndicator(
-  hasPrevious: boolean,
-  previousPredecessors: number[] | undefined,
-  highlightPredIndex: number,
-  predecessors: number[],
-): string {
-  if (hasPrevious && previousPredecessors) {
-    const predChanged = predecessors.some((value, idx) => {
-      return value !== previousPredecessors[idx]
-    })
-
-    if (predChanged && highlightPredIndex >= 0) {
-      return `← 位置 ${highlightPredIndex} 变化`
-    }
-
-    if (!predChanged) {
-      return '（无变化）'
-    }
-  }
-
-  return ''
-}
-
-interface SequenceSectionOptions {
-  hasPrevious: boolean
-  previousSequence: number[] | undefined
-  previousHighlightSeqPosition: number
-  previousPredecessorValue: number | undefined
-  highlightSeqPosition: number
-  predecessorValue: number | undefined
-  highlightClass: string
-  secondaryHighlightClass: string
-  seqChangeIndicator: string
-  input: number[]
-  sequence: number[]
-  onEnter: () => void
-  onLeave: () => void
-}
-
-function renderSequenceSection(options: SequenceSectionOptions) {
-  const {
-    hasPrevious,
-    previousSequence,
-    previousHighlightSeqPosition,
-    previousPredecessorValue,
-    highlightSeqPosition,
-    predecessorValue,
-    highlightClass,
-    secondaryHighlightClass,
-    seqChangeIndicator,
-    input,
-    sequence,
-    onEnter,
-    onLeave,
-  } = options
-
-  return (
-    <div class={styles.stateCompareSection} onMouseEnter={onEnter} onMouseLeave={onLeave}>
-      <div class={styles.sectionTitle}>
-        Sequence State:
-        <span class={styles.sectionHint}>（存储的是 index，→ 后显示对应 value）</span>
-      </div>
-      <div class={styles.stateCompareGrid}>
-        {hasPrevious && previousSequence && (
-          <div class={`${styles.stateRow} ${styles.previousRow}`}>
-            <span class={styles.stateRowLabel}>上一步:</span>
-            <code class={styles.stateCode}>
-              {renderHighlightedArray({
-                array: previousSequence,
-                highlightPos: previousHighlightSeqPosition,
-                highlightClass: styles.highlightPrevious,
-                secondaryHighlightValue: previousPredecessorValue,
-                secondaryHighlightClass: styles.highlightPreviousSecondary,
-              })}
-            </code>
-            <code class={styles.stateCode}>
-              → values:{' '}
-              {renderHighlightedArray({
-                array: previousSequence.map((idx) => {
-                  return input[idx]
-                }),
-                highlightPos: previousHighlightSeqPosition,
-                highlightClass: styles.highlightPrevious,
-              })}
-            </code>
-            <span class={styles.changeIndicator}></span>
-          </div>
-        )}
-        <div class={styles.stateRow}>
-          <span class={styles.stateRowLabel}>{hasPrevious ? '当前:' : ''}</span>
-          <code class={styles.stateCode}>
-            {renderHighlightedArray({
-              array: sequence,
-              highlightPos: highlightSeqPosition,
-              highlightClass,
-              secondaryHighlightValue: predecessorValue,
-              secondaryHighlightClass,
-            })}
-          </code>
-          <code class={styles.stateCode}>
-            → values:{' '}
-            {renderHighlightedArray({
-              array: sequence.map((idx) => {
-                return input[idx]
-              }),
-              highlightPos: highlightSeqPosition,
-              highlightClass,
-            })}
-          </code>
-          <span class={styles.changeIndicator}>{seqChangeIndicator}</span>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-interface PredecessorSectionOptions {
-  hasPrevious: boolean
-  previousPredecessors: number[] | undefined
-  highlightPredIndex: number
-  highlightClass: string
-  predChangeIndicator: string
-  hoveredPositions: number[] | undefined
-  onEnter: () => void
-  onLeave: () => void
-  predecessors: number[]
-}
-
-function renderPredecessorSection(options: PredecessorSectionOptions) {
-  const {
-    hasPrevious,
-    previousPredecessors,
-    highlightPredIndex,
-    highlightClass,
-    predChangeIndicator,
-    hoveredPositions,
-    onEnter,
-    onLeave,
-    predecessors,
-  } = options
-
-  return (
-    <div class={styles.stateCompareSection} onMouseEnter={onEnter} onMouseLeave={onLeave}>
-      <div class={styles.sectionTitle}>
-        Predecessors:
-        <span class={styles.sectionHint}>（每个位置存储前驱元素的 index，-1 表示无前驱）</span>
-      </div>
-      <div class={styles.stateCompareGrid}>
-        {hasPrevious && previousPredecessors && (
-          <div class={`${styles.stateRow} ${styles.previousRow}`}>
-            <span class={styles.stateRowLabel}>上一步:</span>
-            <code class={styles.stateCode}>
-              {renderHighlightedArray({
-                array: previousPredecessors,
-                highlightPos: highlightPredIndex,
-                highlightClass: styles.highlightPrevious,
-              })}
-            </code>
-            <span></span>
-            <span class={styles.changeIndicator}></span>
-          </div>
-        )}
-        <div class={styles.stateRow}>
-          <span class={styles.stateRowLabel}>{hasPrevious ? '当前:' : ''}</span>
-          <code class={styles.stateCode}>
-            {renderHighlightedArray({
-              array: predecessors,
-              highlightPos: highlightPredIndex,
-              highlightClass,
-              hoveredPositions,
-            })}
-          </code>
-          <span></span>
-          <span class={styles.changeIndicator}>{predChangeIndicator}</span>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-interface ChainViewOptions {
-  chains: number[][]
-  changedNodesByChain: Map<number, Set<number>>
-  highlightPredIndex: number
-  isChainAction: boolean
-  highlightClass: string
-  isSequenceHovered: boolean
-  isPredecessorsHovered: boolean | undefined
-  onChainEnter: (chain: number[], chainIndex: number) => () => void
-  onChainLeave: () => void
-  input: number[]
-  predecessors: number[]
-  actionType: StepAction['type'] | undefined
-}
-
-function renderChainView(options: ChainViewOptions) {
-  const {
-    chains,
-    changedNodesByChain,
-    highlightPredIndex,
-    isChainAction,
-    highlightClass,
-    isSequenceHovered,
-    isPredecessorsHovered,
-    onChainEnter,
-    onChainLeave,
-    input,
-    predecessors,
-    actionType,
-  } = options
-
-  return (
-    <div class={styles.chainView}>
-      <h3 class={styles.sectionTitle}>
-        Chain View（当前时刻）
-        <span class={styles.sectionHint}>
-          （按长度排序，左对齐展示前驱链，每行对应一个长度，最右端是当前末尾元素；节点显示
-          value，下方 idx/pred 均为 index）
-        </span>
-      </h3>
-      <div class={styles.chainsContainer}>
-        {chains.map((chain, chainIndex) => {
-          const isHighlightChain = highlightPredIndex >= 0 && chain.includes(highlightPredIndex)
-          const isPredecessorsHighlightChain = isPredecessorsHovered && isHighlightChain
-          const chainClass = isPredecessorsHighlightChain
-            ? `${styles.chain} ${styles.chainHighlight}`
-            : styles.chain
-          const changedNodes = changedNodesByChain.get(chainIndex)
-
-          return (
-            <div
-              key={chainIndex}
-              class={chainClass}
-              onMouseEnter={onChainEnter(chain, chainIndex)}
-              onMouseLeave={onChainLeave}
-            >
-              <div class={styles.chainNodes}>
-                {chain.flatMap((nodeIndex, i) => {
-                  const isHighlightNode = isHighlightChain && nodeIndex === highlightPredIndex
-                  const isLastNode = i === chain.length - 1
-                  const isChainTailHighlight = isSequenceHovered && isLastNode
-                  const isChangedNode =
-                    isChainAction &&
-                    isHighlightChain &&
-                    changedNodes !== undefined &&
-                    changedNodes.has(nodeIndex) &&
-                    !isHighlightNode
-                  const nodeClass = getNodeClassName({
-                    isChainTailHighlight,
-                    isHighlightNode,
-                    isChangedNode,
-                    actionType,
-                    highlightClass,
-                  })
-
-                  const node = (
-                    <div key={`node-${nodeIndex}`} class={nodeClass}>
-                      <span class={styles.nodeValue}>{input[nodeIndex]}</span>
-                      <span class={styles.nodeInfo}>idx:{nodeIndex}</span>
-                      <span class={styles.nodeInfo}>pred:{predecessors[nodeIndex]}</span>
-                    </div>
-                  )
-
-                  if (i < chain.length - 1) {
-                    return [
-                      node,
-                      <span key={`arrow-${nodeIndex}`} class={styles.chainArrow}>
-                        ←
-                      </span>,
-                    ]
-                  }
-
-                  return [node]
-                })}
-              </div>
-            </div>
-          )
-        })}
-        {chains.length === 0 && <div class={styles.emptyChain}>（空序列）</div>}
-      </div>
-    </div>
-  )
-}
-
+/**
+ * 序列状态图组件，编排子组件并协调交互
+ *
+ * @remarks
+ * - 计算链数据和高亮状态
+ * - 将事件处理函数传递给子组件
+ * - 协调 Sequence、Predecessors、ChainView 三个区域的显示
+ */
 export const SequenceGraph: SetupComponent<SequenceGraphProps> = (props) => {
-  const handleChainMouseEnter = (chain: number[], chainIndex: number) => {
-    return () => {
-      props.onChainHover?.(chain, chainIndex)
-    }
+  /* 链 hover 事件处理 */
+  const handleChainHover = (chain: number[], chainIndex: number) => {
+    props.onChainHover?.(chain, chainIndex)
   }
 
-  const handleChainMouseLeave = () => {
+  const handleChainLeave = () => {
     props.onChainLeave?.()
   }
 
+  /* Sequence 区域 hover 事件处理 */
   const handleSequenceMouseEnter = () => {
     props.onSequenceHover?.()
   }
@@ -571,6 +90,7 @@ export const SequenceGraph: SetupComponent<SequenceGraphProps> = (props) => {
     props.onSequenceLeave?.()
   }
 
+  /* Predecessors 区域 hover 事件处理 */
   const handlePredecessorsMouseEnter = () => {
     props.onPredecessorsHover?.()
   }
@@ -580,17 +100,22 @@ export const SequenceGraph: SetupComponent<SequenceGraphProps> = (props) => {
   }
 
   return () => {
+    const { action, previousSequence, previousPredecessors } = props
+
+    /* 构建当前和上一步的链数据 */
     const chains = buildAllChains(props.sequence, props.predecessors)
     const previousChains =
-      props.previousSequence && props.previousPredecessors
-        ? buildAllChains(props.previousSequence, props.previousPredecessors)
+      previousSequence && previousPredecessors
+        ? buildAllChains(previousSequence, previousPredecessors)
         : undefined
-    const { action, previousSequence, previousPredecessors } = props
-    const highlightClass = getHighlightClass(action)
-    const secondaryHighlightClass = getSecondaryHighlightClass(action)
+
+    /* 计算高亮相关状态 */
+    const highlightClass = getHighlightClass(action, mergedStyles)
+    const secondaryHighlightClass = getSecondaryHighlightClass(action, mergedStyles)
     const hasPrevious = previousSequence !== undefined
     const isChainAction = action?.type === 'append' || action?.type === 'replace'
 
+    /* 计算高亮位置和变更节点 */
     const { highlightSeqPosition, highlightPredIndex, previousHighlightSeqPosition } =
       computeHighlightState(action, props.sequence)
 
@@ -601,6 +126,7 @@ export const SequenceGraph: SetupComponent<SequenceGraphProps> = (props) => {
       highlightPredIndex,
     )
 
+    /* 计算变更指示器文本 */
     const seqChangeIndicator = getSeqChangeIndicator(action, hasPrevious)
 
     const { predecessorValue, previousPredecessorValue } = computePredecessorHighlight(
@@ -617,49 +143,49 @@ export const SequenceGraph: SetupComponent<SequenceGraphProps> = (props) => {
     )
 
     return (
-      <div class={styles.sequenceGraph}>
-        {renderSequenceSection({
-          hasPrevious,
-          previousSequence,
-          previousHighlightSeqPosition,
-          previousPredecessorValue,
-          highlightSeqPosition,
-          predecessorValue,
-          highlightClass,
-          secondaryHighlightClass,
-          seqChangeIndicator,
-          input: props.input,
-          sequence: props.sequence,
-          onEnter: handleSequenceMouseEnter,
-          onLeave: handleSequenceMouseLeave,
-        })}
+      <div class={mergedStyles.sequenceGraph}>
+        {/* Sequence 状态区域 */}
+        <SequenceSection
+          input={props.input}
+          sequence={props.sequence}
+          previousSequence={previousSequence}
+          highlightSeqPosition={highlightSeqPosition}
+          previousHighlightSeqPosition={previousHighlightSeqPosition}
+          predecessorValue={predecessorValue}
+          previousPredecessorValue={previousPredecessorValue}
+          highlightClass={highlightClass}
+          secondaryHighlightClass={secondaryHighlightClass}
+          seqChangeIndicator={seqChangeIndicator}
+          onMouseEnter={handleSequenceMouseEnter}
+          onMouseLeave={handleSequenceMouseLeave}
+        />
 
-        {renderPredecessorSection({
-          hasPrevious,
-          previousPredecessors,
-          highlightPredIndex,
-          highlightClass,
-          predChangeIndicator,
-          hoveredPositions: props.hoveredIndexes,
-          onEnter: handlePredecessorsMouseEnter,
-          onLeave: handlePredecessorsMouseLeave,
-          predecessors: props.predecessors,
-        })}
+        {/* Predecessors 数组区域 */}
+        <PredecessorSection
+          predecessors={props.predecessors}
+          previousPredecessors={previousPredecessors}
+          highlightPredIndex={highlightPredIndex}
+          highlightClass={highlightClass}
+          predChangeIndicator={predChangeIndicator}
+          hoveredPositions={props.hoveredIndexes}
+          onMouseEnter={handlePredecessorsMouseEnter}
+          onMouseLeave={handlePredecessorsMouseLeave}
+        />
 
-        {renderChainView({
-          chains,
-          changedNodesByChain,
-          highlightPredIndex,
-          isChainAction,
-          highlightClass,
-          isSequenceHovered: Boolean(props.isSequenceHovered),
-          isPredecessorsHovered: props.isPredecessorsHovered,
-          onChainEnter: handleChainMouseEnter,
-          onChainLeave: handleChainMouseLeave,
-          input: props.input,
-          predecessors: props.predecessors,
-          actionType: action?.type,
-        })}
+        {/* 链视图区域 */}
+        <ChainView
+          chains={chains}
+          changedNodesByChain={changedNodesByChain}
+          highlightPredIndex={highlightPredIndex}
+          isChainAction={isChainAction}
+          isSequenceHovered={Boolean(props.isSequenceHovered)}
+          isPredecessorsHovered={props.isPredecessorsHovered}
+          input={props.input}
+          predecessors={props.predecessors}
+          actionType={action?.type}
+          onChainHover={handleChainHover}
+          onChainLeave={handleChainLeave}
+        />
       </div>
     )
   }

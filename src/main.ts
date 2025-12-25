@@ -1,7 +1,7 @@
 import './styles/main.css'
 import './styles/router.css'
 import { App } from './app.tsx'
-import { router } from './router'
+import { router } from './router/index.ts'
 import type { DomAppInstance } from '@jiangshengdev/mini-vue'
 import { createApp } from '@jiangshengdev/mini-vue'
 

@@ -1,13 +1,26 @@
 /**
  * LIS 算法可视化 - 输入编辑器组件
  *
- * 允许用户编辑输入数组，输入变化时重新计算追踪
+ * @remarks
+ * 允许用户编辑输入数组，输入变化时重新计算追踪。
+ * - 支持逗号或空格分隔的数字输入
+ * - 提供清空、重置、随机生成等快捷操作
+ * - 实时校验输入格式并显示错误提示
  */
 
-import styles from '../styles/visualization.module.css'
+import sharedStyles from '../styles/shared.module.css'
+import stepControlsStyles from '../styles/step-controls.module.css'
+import inputEditorStyles from '../styles/input-editor.module.css'
+import { generateRandomSequence, parseInput } from '../utils/input-utils.ts'
 import type { SetupComponent } from '@jiangshengdev/mini-vue'
 import { state } from '@jiangshengdev/mini-vue'
 
+/** 合并多个样式模块 */
+const styles = { ...sharedStyles, ...stepControlsStyles, ...inputEditorStyles }
+
+/**
+ * 输入编辑器组件的 Props 定义
+ */
 export interface InputEditorProps {
   /** 当前输入数组 */
   input: number[]
@@ -15,128 +28,29 @@ export interface InputEditorProps {
   onInputChange: (input: number[]) => void
 }
 
-/** 默认示例数组 */
+/** 默认示例数组，用于重置操作 */
 const defaultInput = [2, 1, 3, 0, 4]
 
 /**
- * 去重处理：保留第一次出现的值，后续重复的替换为 -1。
- * -1 本身不参与去重（可以有多个 -1）。
+ * 输入编辑器组件，提供数组输入和快捷操作
+ *
+ * @remarks
+ * - 使用 `state` 管理输入文本和错误状态
+ * - 输入变化时实时解析并校验
+ * - 提供清空、重置、随机生成三种快捷操作
  */
-function deduplicateInput(numbers: number[]): number[] {
-  const seen = new Set<number>()
-  const result: number[] = []
-
-  for (const number_ of numbers) {
-    /* -1 是占位符，不参与去重 */
-    if (number_ === -1) {
-      result.push(-1)
-      continue
-    }
-
-    if (seen.has(number_)) {
-      /* 重复值替换为 -1 */
-      result.push(-1)
-    } else {
-      seen.add(number_)
-      result.push(number_)
-    }
-  }
-
-  return result
-}
-
-/** 解析输入字符串为数字数组 */
-function parseInput(
-  value: string,
-): { success: true; data: number[] } | { success: false; error: string } {
-  const trimmed = value.trim()
-
-  if (!trimmed) {
-    return { success: true, data: [] }
-  }
-
-  // 支持逗号或空格分隔
-  const parts = trimmed.split(/[,\s]+/).filter(Boolean)
-  const numbers: number[] = []
-
-  for (const part of parts) {
-    const number_ = Number(part)
-
-    if (Number.isNaN(number_)) {
-      return { success: false, error: `无效的数字: "${part}"` }
-    }
-
-    /* 只允许 -1 和非负整数 */
-    if (number_ < -1) {
-      return { success: false, error: `不支持的负数: "${part}"（仅支持 -1 表示新节点）` }
-    }
-
-    if (!Number.isInteger(number_)) {
-      return { success: false, error: `不支持小数: "${part}"` }
-    }
-
-    numbers.push(number_)
-  }
-
-  /* 去重：重复值替换为 -1，符合真实 diff 场景 */
-  return { success: true, data: deduplicateInput(numbers) }
-}
-
-/** 归一化数组：将非 -1 的值按大小顺序映射为 0, 1, 2, ... */
-function normalizeSequence(numbers: number[]): number[] {
-  // 提取非 -1 的值并排序
-  const nonNegativeOnes = numbers.filter((n) => {
-    return n !== -1
-  })
-  const sorted = [...nonNegativeOnes].sort((a, b) => {
-    return a - b
-  })
-
-  // 建立值到归一化索引的映射
-  const valueToIndex = new Map<number, number>()
-
-  for (const [index, value] of sorted.entries()) {
-    valueToIndex.set(value, index)
-  }
-
-  // 替换原数组中的值
-  return numbers.map((n) => {
-    return n === -1 ? -1 : valueToIndex.get(n)!
-  })
-}
-
-/** 生成随机数字序列（无重复值） */
-function generateRandomSequence(): number[] {
-  // 随机长度 8-15
-  const length = Math.floor(Math.random() * 8) + 8
-  const result: number[] = []
-  const used = new Set<number>()
-
-  for (let i = 0; i < length; i++) {
-    // 随机决定是否生成 -1（约 10% 概率）
-    if (Math.random() < 0.1) {
-      result.push(-1)
-    } else {
-      // 生成不重复的 0-50 随机数
-      let number_: number
-
-      do {
-        number_ = Math.floor(Math.random() * 51)
-      } while (used.has(number_))
-
-      used.add(number_)
-      result.push(number_)
-    }
-  }
-
-  // 归一化：将值映射为 0, 1, 2, ...
-  return normalizeSequence(result)
-}
-
 export const InputEditor: SetupComponent<InputEditorProps> = (props) => {
+  /** 输入框文本状态 */
   const inputText = state(props.input.join(', '))
+  /** 错误信息状态 */
   const error = state<string | undefined>(undefined)
 
+  /**
+   * 处理输入变化事件
+   *
+   * @remarks
+   * 解析输入文本，成功则通知父组件，失败则显示错误
+   */
   const handleInput = (event: Event) => {
     const target = event.target as HTMLInputElement
     const { value } = target
@@ -153,12 +67,14 @@ export const InputEditor: SetupComponent<InputEditorProps> = (props) => {
     }
   }
 
+  /** 清空输入 */
   const handleClear = () => {
     inputText.set('')
     error.set(undefined)
     props.onInputChange([])
   }
 
+  /** 重置为默认示例 */
   const handleReset = () => {
     const text = defaultInput.join(', ')
 
@@ -167,6 +83,7 @@ export const InputEditor: SetupComponent<InputEditorProps> = (props) => {
     props.onInputChange(defaultInput)
   }
 
+  /** 生成随机序列 */
   const handleRandom = () => {
     const randomSequence = generateRandomSequence()
     const text = randomSequence.join(', ')

@@ -10,7 +10,7 @@ import {
   HandlingUserInput,
   HelloWorld,
   SimpleComponent,
-} from '../views/basic'
+} from '../views/basic/index.ts'
 import type { RouteRecord } from '@jiangshengdev/mini-vue'
 import { createRouter } from '@jiangshengdev/mini-vue'
 
