@@ -15,7 +15,6 @@ import {
 } from './components/index.ts'
 import {
   createHoverManager,
-  createKeyboardHandler,
   createPlaybackController,
   createStateManager,
 } from './controllers/index.ts'
@@ -26,7 +25,7 @@ import layoutStyles from './styles/layout.module.css'
 import { traceLongestIncreasingSubsequence } from './trace.ts'
 import type { StepNavigator } from './types.ts'
 import type { SetupComponent } from '@jiangshengdev/mini-vue'
-import { onScopeDispose } from '@jiangshengdev/mini-vue'
+import { onUnmounted } from '@jiangshengdev/mini-vue'
 
 /* 合并样式对象，便于在 JSX 中统一引用 */
 const styles = { ...sharedStyles, ...layoutStyles }
@@ -115,48 +114,20 @@ export const LongestIncreasingSubsequenceVisualization: SetupComponent = () => {
     updateStep,
   })
 
-  /* ========================================================================
-   * 初始化键盘处理器
-   * ======================================================================== */
-  const keyboardHandler = createKeyboardHandler({
-    onPrevious: eventHandlers.handlePrevious,
-    onNext: eventHandlers.handleNext,
-    onReset: eventHandlers.handleReset,
-    /* 跳转到最后一步 */
-    onGoToEnd() {
-      playbackController.stop()
+  const handleGoToEnd = (): void => {
+    playbackController.stop()
 
-      const navState = navigator.getState()
+    const navState = navigator.getState()
 
-      navigator.goTo(navState.totalSteps - 1)
-      updateStep()
-    },
-    onTogglePlay: eventHandlers.handleTogglePlay,
-    /* 加快播放速度（减少间隔时间） */
-    onSpeedUp() {
-      const currentSpeed = state.speed.get()
-      const newSpeed = Math.max(100, currentSpeed - 100)
-
-      eventHandlers.handleSpeedChange(newSpeed)
-    },
-    /* 减慢播放速度（增加间隔时间） */
-    onSpeedDown() {
-      const currentSpeed = state.speed.get()
-      const newSpeed = Math.min(2000, currentSpeed + 100)
-
-      eventHandlers.handleSpeedChange(newSpeed)
-    },
-  })
-
-  /* 注册键盘事件监听 */
-  keyboardHandler.register()
+    navigator.goTo(navState.totalSteps - 1)
+    updateStep()
+  }
 
   /* ========================================================================
    * 清理函数：组件卸载时释放所有资源
    * ======================================================================== */
-  onScopeDispose(() => {
+  onUnmounted(() => {
     playbackController.dispose()
-    keyboardHandler.dispose()
     stateManager.dispose()
   })
 
@@ -176,7 +147,7 @@ export const LongestIncreasingSubsequenceVisualization: SetupComponent = () => {
     /* 处理空输入的情况：显示简化界面 */
     if (input.length === 0) {
       return (
-        <div class={`${styles.container} ${styles.lisTheme}`}>
+        <div class={`${styles.container} ${styles.lisTheme}`} data-testid="lis-visualization">
           <header class={styles.header}>
             <h1 class={styles.title}>LIS 算法可视化</h1>
             <p class={styles.intro}>
@@ -187,7 +158,9 @@ export const LongestIncreasingSubsequenceVisualization: SetupComponent = () => {
             <InputEditor input={input} onInputChange={eventHandlers.handleInputChange} />
           </header>
           <main class={styles.main}>
-            <div class={styles.emptyState}>请输入数组以开始可视化</div>
+            <div class={styles.emptyState} data-testid="lis-empty-state">
+              请输入数组以开始可视化
+            </div>
           </main>
         </div>
       )
@@ -195,7 +168,7 @@ export const LongestIncreasingSubsequenceVisualization: SetupComponent = () => {
 
     /* 正常渲染：完整的可视化界面 */
     return (
-      <div class={`${styles.container} ${styles.lisTheme}`}>
+      <div class={`${styles.container} ${styles.lisTheme}`} data-testid="lis-visualization">
         <header class={styles.header}>
           <h1 class={styles.title}>LIS 算法可视化</h1>
           <p class={styles.intro}>
@@ -214,6 +187,7 @@ export const LongestIncreasingSubsequenceVisualization: SetupComponent = () => {
             onPrev={eventHandlers.handlePrevious}
             onNext={eventHandlers.handleNext}
             onReset={eventHandlers.handleReset}
+            onGoToEnd={handleGoToEnd}
             onTogglePlay={eventHandlers.handleTogglePlay}
             onSpeedChange={eventHandlers.handleSpeedChange}
           />

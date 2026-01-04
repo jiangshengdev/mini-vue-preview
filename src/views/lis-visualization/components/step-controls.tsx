@@ -10,7 +10,9 @@
 
 import sharedStyles from '../styles/shared.module.css'
 import styles from '../styles/step-controls.module.css'
+import { createKeyboardHandler } from '../controllers/index.ts'
 import type { SetupComponent } from '@jiangshengdev/mini-vue'
+import { onMounted, onUnmounted } from '@jiangshengdev/mini-vue'
 
 /* 确保共享样式（CSS 变量）被加载 */
 void sharedStyles
@@ -39,6 +41,8 @@ export interface StepControlsProps {
   onReset: () => void
   /** 点击自动播放/暂停 */
   onTogglePlay: () => void
+  /** 跳转到最后一步（End） */
+  onGoToEnd?: () => void
   /** 速度变化 */
   onSpeedChange: (speed: number) => void
 }
@@ -47,7 +51,7 @@ export interface StepControlsProps {
  * 步骤控制组件，提供算法执行的导航和播放控制
  *
  * @remarks
- * - 支持键盘快捷键：← 上一步、→ 下一步、Home 重置、Space 播放/暂停
+ * - 支持键盘快捷键：← 上一步、→ 下一步、Home 重置、End 跳到最后、Space 播放/暂停、+/- 调速
  * - 速度滑块范围：100ms ~ 2000ms
  */
 export const StepControls: SetupComponent<StepControlsProps> = (props) => {
@@ -58,12 +62,41 @@ export const StepControls: SetupComponent<StepControlsProps> = (props) => {
     props.onSpeedChange(Number(target.value))
   }
 
+  const keyboardHandler = createKeyboardHandler({
+    onPrevious: props.onPrev,
+    onNext: props.onNext,
+    onReset: props.onReset,
+    onGoToEnd() {
+      props.onGoToEnd?.()
+    },
+    onTogglePlay: props.onTogglePlay,
+    onSpeedUp() {
+      const newSpeed = Math.max(100, props.speed - 100)
+
+      props.onSpeedChange(newSpeed)
+    },
+    onSpeedDown() {
+      const newSpeed = Math.min(2000, props.speed + 100)
+
+      props.onSpeedChange(newSpeed)
+    },
+  })
+
+  onMounted(() => {
+    keyboardHandler.register()
+  })
+
+  onUnmounted(() => {
+    keyboardHandler.dispose()
+  })
+
   return () => {
     return (
-      <div class={styles.stepControls}>
+      <div class={styles.stepControls} data-testid="lis-step-controls">
         {/* 控制按钮行 */}
         <div class={styles.controlsRow}>
           <button
+            data-testid="lis-prev"
             type="button"
             class={styles.controlButton}
             onClick={props.onPrev}
@@ -74,11 +107,17 @@ export const StepControls: SetupComponent<StepControlsProps> = (props) => {
             上一步
           </button>
 
-          <span class={styles.stepIndicator}>
+          <span
+            class={styles.stepIndicator}
+            data-testid="lis-step-indicator"
+            data-current-step={`${props.currentStep}`}
+            data-last-step={`${props.totalSteps - 1}`}
+          >
             第 {props.currentStep} 步 / 共 {props.totalSteps - 1} 步
           </span>
 
           <button
+            data-testid="lis-next"
             type="button"
             class={styles.controlButton}
             onClick={props.onNext}
@@ -90,6 +129,7 @@ export const StepControls: SetupComponent<StepControlsProps> = (props) => {
           </button>
 
           <button
+            data-testid="lis-reset"
             type="button"
             class={styles.controlButton}
             onClick={props.onReset}
@@ -100,6 +140,7 @@ export const StepControls: SetupComponent<StepControlsProps> = (props) => {
           </button>
 
           <button
+            data-testid="lis-toggle-play"
             type="button"
             class={`${styles.controlButton} ${props.isPlaying ? styles.playing : ''}`}
             onClick={props.onTogglePlay}
@@ -124,6 +165,7 @@ export const StepControls: SetupComponent<StepControlsProps> = (props) => {
           <label class={styles.speedLabel}>
             速度：{props.speed}ms
             <input
+              data-testid="lis-speed-slider"
               type="range"
               class={styles.speedSlider}
               min="100"
